@@ -8,7 +8,7 @@ cp .env.example .env
 npm run dev
 ```
 
-The login flow calls `VITE_API_URL` (default `http://localhost:3000`) with credentials included so the refresh token remains in an HttpOnly cookie.
+The login flow calls the same-origin `/api` path in local development; Vite proxies it to `http://localhost:3000`. Set `VITE_API_URL` only when FE and BE are deployed on different origins. Credentials are included so the refresh token remains in an HttpOnly cookie.
 
 ```bash
 npm run lint

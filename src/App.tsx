@@ -12,7 +12,7 @@ type LoginResponse = {
   user: AuthUser
 }
 
-const apiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
+const apiUrl = import.meta.env.VITE_API_URL || ''
 
 function App() {
   const [identifier, setIdentifier] = useState('manager@sports-center.local')
