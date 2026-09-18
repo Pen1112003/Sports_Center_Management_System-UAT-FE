@@ -35,4 +35,18 @@ input:focus { border-color: #e09d57; box-shadow: 0 2px 0 #e09d57; }
 .status-grid div { display: grid; gap: 16px; padding: 22px; background: #f4efe5; }
 .status-grid span { color: #89948c; font-size: .72rem; text-transform: uppercase; letter-spacing: .12em; }
 .status-grid strong { overflow-wrap: anywhere; }
+.member-content { max-width: 1120px; }
+.member-content h1 { max-width: 760px; }
+.success-message { margin: 28px 0 0; color: #1d6b4f; font-weight: 700; }
+.empty-state { margin-top: 48px; color: #68756d; }
+.class-list { display: grid; gap: 1px; margin-top: 54px; background: #cfd5ca; }
+.class-row { display: flex; align-items: center; justify-content: space-between; gap: 32px; padding: 26px; background: #f4efe5; }
+.class-date { margin: 0 0 10px; color: #b16e35; font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.class-row h2 { margin: 0 0 8px; font-family: Georgia, serif; font-size: 2rem; font-weight: 400; }
+.class-row p:not(.class-date) { margin: 0; color: #68756d; }
+.class-action { display: grid; min-width: 160px; gap: 4px; text-align: right; }
+.class-action strong { font-size: 1.6rem; }
+.class-action span { color: #89948c; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; }
+.class-action .primary-button { margin-top: 14px; }
 @media (max-width: 800px) { .login-shell { grid-template-columns: 1fr; } .login-intro { min-height: 58vh; padding: 28px; } .login-panel { min-height: 60vh; padding: 44px 28px; } .status-grid { grid-template-columns: 1fr; margin-top: 42px; } }
+@media (max-width: 800px) { .class-row { align-items: flex-start; flex-direction: column; gap: 22px; } .class-action { width: 100%; text-align: left; } }
