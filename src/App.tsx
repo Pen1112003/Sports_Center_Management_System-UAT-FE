@@ -18,12 +18,399 @@ type ClassSchedule = {
   availableSlots: number
 }
 
+type MembershipPackage = {
+  id: number
+  code: string
+  name: string
+  description: string | null
+  price: number
+  durationDays: number
+  sessionLimit: number | null
+  sportType: string
+  benefits: string[]
+  isBestSeller: boolean
+  status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED'
+  activeSubscribers: number
+  createdAt: string
+  updatedAt: string
+}
+
 type LoginResponse = {
   accessToken: string
   user: AuthUser
 }
 
 const apiUrl = import.meta.env.VITE_API_URL || ''
+
+function formatVND(amount: number): string {
+  return amount.toLocaleString('vi-VN') + ' đ'
+}
+
+function formatDuration(days: number): string {
+  if (days >= 365) return `${Math.round(days / 365)} Năm`
+  if (days >= 30) return `${Math.round(days / 30)} Tháng`
+  return `${days} Ngày`
+}
+
+const SPORT_OPTIONS = ['Gym', 'Yoga', 'Boxing', 'Bơi lội', 'Pilates', 'Zumba', 'Toàn diện']
+const STATUS_FILTERS = [
+  { label: 'Tất cả', value: 'ALL' },
+  { label: 'Đang bán', value: 'ACTIVE' },
+  { label: 'Tạm dừng', value: 'INACTIVE' },
+]
+
+function PackageManagement({ accessToken }: { accessToken: string }) {
+  const [packages, setPackages] = useState<MembershipPackage[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [statusFilter, setStatusFilter] = useState('ALL')
+  const [sportFilter, setSportFilter] = useState('')
+  const [search, setSearch] = useState('')
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editingPackage, setEditingPackage] = useState<MembershipPackage | null>(null)
+  const [togglingId, setTogglingId] = useState<number | null>(null)
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
+  // Form state
+  const [formCode, setFormCode] = useState('')
+  const [formName, setFormName] = useState('')
+  const [formDescription, setFormDescription] = useState('')
+  const [formPrice, setFormPrice] = useState('')
+  const [formDuration, setFormDuration] = useState('')
+  const [formSessionLimit, setFormSessionLimit] = useState('')
+  const [formSportType, setFormSportType] = useState('Gym')
+  const [formBenefits, setFormBenefits] = useState('')
+  const [formBestSeller, setFormBestSeller] = useState(false)
+  const [formError, setFormError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  async function fetchPackages() {
+    setIsLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (statusFilter) params.set('status', statusFilter)
+      if (sportFilter) params.set('sportType', sportFilter)
+      if (search.trim()) params.set('search', search.trim())
+
+      const response = await fetch(`${apiUrl}/api/packages?${params}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (!response.ok) throw new Error('Không thể tải danh mục gói tập')
+      setPackages((await response.json()) as MembershipPackage[])
+    } catch (err) {
+      setFeedback({ type: 'error', message: err instanceof Error ? err.message : 'Lỗi kết nối' })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchPackages()
+  }, [statusFilter, sportFilter]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function openCreateModal() {
+    setEditingPackage(null)
+    setFormCode('')
+    setFormName('')
+    setFormDescription('')
+    setFormPrice('')
+    setFormDuration('')
+    setFormSessionLimit('')
+    setFormSportType('Gym')
+    setFormBenefits('')
+    setFormBestSeller(false)
+    setFormError('')
+    setModalOpen(true)
+  }
+
+  function openEditModal(pkg: MembershipPackage) {
+    setEditingPackage(pkg)
+    setFormCode(pkg.code)
+    setFormName(pkg.name)
+    setFormDescription(pkg.description || '')
+    setFormPrice(String(pkg.price))
+    setFormDuration(String(pkg.durationDays))
+    setFormSessionLimit(pkg.sessionLimit ? String(pkg.sessionLimit) : '')
+    setFormSportType(pkg.sportType)
+    setFormBenefits(pkg.benefits.join(', '))
+    setFormBestSeller(pkg.isBestSeller)
+    setFormError('')
+    setModalOpen(true)
+  }
+
+  async function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setFormError('')
+    setIsSubmitting(true)
+
+    const price = Number(formPrice)
+    const durationDays = Number(formDuration)
+    if (!price || price <= 0) { setFormError('Giá gói tập phải lớn hơn 0'); setIsSubmitting(false); return }
+    if (!durationDays || durationDays <= 0) { setFormError('Thời hạn sử dụng phải lớn hơn 0 ngày'); setIsSubmitting(false); return }
+
+    const benefits = formBenefits
+      .split(/[,;\n]/)
+      .map((b) => b.trim())
+      .filter(Boolean)
+
+    const payload: Record<string, unknown> = {
+      name: formName,
+      description: formDescription || null,
+      price,
+      durationDays,
+      sessionLimit: formSessionLimit ? Number(formSessionLimit) : null,
+      sportType: formSportType,
+      benefits,
+      isBestSeller: formBestSeller,
+    }
+
+    try {
+      let response: Response
+      if (editingPackage) {
+        response = await fetch(`${apiUrl}/api/packages/${editingPackage.id}`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+      } else {
+        payload.code = formCode
+        response = await fetch(`${apiUrl}/api/packages`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+      }
+
+      const body = await response.json()
+      if (!response.ok) {
+        throw new Error(body.message || 'Không thể lưu gói tập')
+      }
+
+      setModalOpen(false)
+      setFeedback({ type: 'success', message: editingPackage ? 'Cập nhật gói tập thành công' : 'Tạo gói tập mới thành công' })
+      fetchPackages()
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Lỗi hệ thống')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  async function togglePackageStatus(pkg: MembershipPackage) {
+    setTogglingId(pkg.id)
+    const endpoint = pkg.status === 'ACTIVE' ? 'deactivate' : 'activate'
+    try {
+      const response = await fetch(`${apiUrl}/api/packages/${pkg.id}/${endpoint}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (!response.ok) throw new Error('Không thể chuyển đổi trạng thái')
+      setFeedback({
+        type: 'success',
+        message: endpoint === 'activate' ? `Đã kích hoạt gói "${pkg.name}"` : `Đã tạm dừng gói "${pkg.name}"`,
+      })
+      fetchPackages()
+    } catch (err) {
+      setFeedback({ type: 'error', message: err instanceof Error ? err.message : 'Lỗi hệ thống' })
+    } finally {
+      setTogglingId(null)
+    }
+  }
+
+  function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    fetchPackages()
+  }
+
+  // Auto-clear feedback after 4 seconds
+  useEffect(() => {
+    if (!feedback) return
+    const timer = setTimeout(() => setFeedback(null), 4000)
+    return () => clearTimeout(timer)
+  }, [feedback])
+
+  return (
+    <section className="packages-section" aria-live="polite">
+      <div className="packages-header">
+        <div>
+          <p className="eyebrow">MANAGER / PACKAGE CATALOG</p>
+          <h1 className="packages-title">Danh mục Gói tập</h1>
+          <p className="lead">Cấu hình và quản lý danh mục gói tập, giá bán, thời hạn sử dụng và bộ môn áp dụng.</p>
+        </div>
+        <button className="primary-button create-btn" type="button" onClick={openCreateModal} id="btn-create-package">
+          + Tạo gói tập mới
+        </button>
+      </div>
+
+      {feedback && (
+        <div className={`feedback-bar ${feedback.type}`} role="status">
+          {feedback.message}
+        </div>
+      )}
+
+      <div className="packages-toolbar">
+        <div className="filter-chips" role="group" aria-label="Lọc trạng thái">
+          {STATUS_FILTERS.map((f) => (
+            <button
+              key={f.value}
+              className={`chip ${statusFilter === f.value ? 'chip-active' : ''}`}
+              type="button"
+              onClick={() => setStatusFilter(f.value)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <select
+          className="sport-select"
+          value={sportFilter}
+          onChange={(e) => setSportFilter(e.target.value)}
+          aria-label="Lọc bộ môn"
+        >
+          <option value="">Tất cả bộ môn</option>
+          {SPORT_OPTIONS.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+        <form className="search-form" onSubmit={handleSearchSubmit}>
+          <input
+            className="search-input"
+            type="text"
+            placeholder="Tìm kiếm tên, mã gói..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Tìm kiếm gói tập"
+          />
+        </form>
+      </div>
+
+      {isLoading ? (
+        <p className="empty-state">Đang tải danh mục gói tập...</p>
+      ) : packages.length === 0 ? (
+        <p className="empty-state">Không tìm thấy gói tập nào.</p>
+      ) : (
+        <div className="package-grid" id="package-grid">
+          {packages.map((pkg) => (
+            <article className={`package-card ${pkg.status === 'INACTIVE' ? 'card-inactive' : ''}`} key={pkg.id} data-package-id={pkg.id}>
+              <div className="card-top">
+                <span className={`sport-badge sport-${pkg.sportType.toLowerCase().replace(/\s+/g, '-')}`}>
+                  {pkg.sportType}
+                </span>
+                {pkg.isBestSeller && <span className="bestseller-badge">⭐ Bán chạy nhất</span>}
+                <span className={`status-badge status-${pkg.status.toLowerCase()}`}>{pkg.status === 'ACTIVE' ? 'Đang bán' : pkg.status === 'INACTIVE' ? 'Tạm dừng' : 'Lưu trữ'}</span>
+              </div>
+
+              <div className="card-body">
+                <p className="pkg-code">{pkg.code}</p>
+                <h2 className="pkg-name">{pkg.name}</h2>
+                {pkg.description && <p className="pkg-desc">{pkg.description}</p>}
+                <p className="pkg-price">{formatVND(pkg.price)}</p>
+                <div className="pkg-meta">
+                  <span>⏱ {formatDuration(pkg.durationDays)}</span>
+                  <span>🏋️ {pkg.sessionLimit ? `${pkg.sessionLimit} buổi` : 'Không giới hạn'}</span>
+                </div>
+                {pkg.benefits.length > 0 && (
+                  <ul className="pkg-benefits">
+                    {pkg.benefits.map((b, i) => (
+                      <li key={i}>✓ {b}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="card-actions">
+                <label className="toggle-label" htmlFor={`toggle-${pkg.id}`}>
+                  <input
+                    id={`toggle-${pkg.id}`}
+                    type="checkbox"
+                    className="toggle-input"
+                    checked={pkg.status === 'ACTIVE'}
+                    disabled={togglingId === pkg.id}
+                    onChange={() => togglePackageStatus(pkg)}
+                  />
+                  <span className="toggle-slider" />
+                </label>
+                <button className="edit-btn" type="button" onClick={() => openEditModal(pkg)}>
+                  ✏️ Chỉnh sửa
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {modalOpen && (
+        <div className="modal-backdrop" onClick={() => setModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="modal-title">
+            <div className="modal-header">
+              <h2 id="modal-title">{editingPackage ? 'Chỉnh sửa gói tập' : 'Tạo gói tập mới'}</h2>
+              <button className="modal-close" type="button" onClick={() => setModalOpen(false)} aria-label="Đóng">
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleFormSubmit} className="modal-form">
+              {!editingPackage && (
+                <>
+                  <label htmlFor="pkg-code">Mã gói tập</label>
+                  <input id="pkg-code" value={formCode} onChange={(e) => setFormCode(e.target.value)} placeholder="PKG-GYM-3M" required />
+                </>
+              )}
+              <label htmlFor="pkg-name">Tên gói tập</label>
+              <input id="pkg-name" value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="Gym Standard 3 Tháng" required />
+
+              <label htmlFor="pkg-desc">Mô tả</label>
+              <textarea id="pkg-desc" value={formDescription} onChange={(e) => setFormDescription(e.target.value)} placeholder="Mô tả ngắn gọn gói tập..." rows={2} />
+
+              <div className="form-row">
+                <div>
+                  <label htmlFor="pkg-price">Giá niêm yết (VND)</label>
+                  <input id="pkg-price" type="number" min="1" value={formPrice} onChange={(e) => setFormPrice(e.target.value)} placeholder="2500000" required />
+                </div>
+                <div>
+                  <label htmlFor="pkg-duration">Thời hạn (ngày)</label>
+                  <input id="pkg-duration" type="number" min="1" value={formDuration} onChange={(e) => setFormDuration(e.target.value)} placeholder="90" required />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div>
+                  <label htmlFor="pkg-session">Số buổi tập tối đa</label>
+                  <input id="pkg-session" type="number" min="1" value={formSessionLimit} onChange={(e) => setFormSessionLimit(e.target.value)} placeholder="Để trống = không giới hạn" />
+                </div>
+                <div>
+                  <label htmlFor="pkg-sport">Bộ môn áp dụng</label>
+                  <select id="pkg-sport" value={formSportType} onChange={(e) => setFormSportType(e.target.value)} required>
+                    {SPORT_OPTIONS.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <label htmlFor="pkg-benefits">Tiện ích tích hợp (phân tách bằng dấu phẩy)</label>
+              <input id="pkg-benefits" value={formBenefits} onChange={(e) => setFormBenefits(e.target.value)} placeholder="Tủ đồ thông minh, Nước uống điện giải, Khăn tập" />
+
+              <label className="checkbox-label" htmlFor="pkg-bestseller">
+                <input id="pkg-bestseller" type="checkbox" checked={formBestSeller} onChange={(e) => setFormBestSeller(e.target.checked)} />
+                Đánh dấu "Bán chạy nhất" (Best Seller)
+              </label>
+
+              {formError && <p className="error-message" role="alert">{formError}</p>}
+
+              <button className="primary-button submit-btn" type="submit" disabled={isSubmitting}>
+                {isSubmitting ? 'Đang lưu...' : editingPackage ? 'Cập nhật gói tập' : 'Phát hành gói tập'}{' '}
+                <span aria-hidden="true">↗</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
 
 function App() {
   const [identifier, setIdentifier] = useState('manager@sports-center.local')
@@ -37,6 +424,7 @@ function App() {
   const [registeringClassId, setRegisteringClassId] = useState<number | null>(null)
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'packages'>('dashboard')
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -65,6 +453,7 @@ function App() {
     setUser(null)
     setAccessToken('')
     setClasses([])
+    setActiveTab('dashboard')
   }
 
   useEffect(() => {
@@ -135,22 +524,52 @@ function App() {
         </main>
       )
     }
+
+    // CENTER_MANAGER and other roles
+    const isManager = user.role === 'CENTER_MANAGER'
+
     return (
       <main className="shell dashboard-shell">
         <header className="topbar">
           <div className="brand-mark">SC<span>/</span>OS</div>
+          <nav className="topbar-nav">
+            {isManager && (
+              <>
+                <button
+                  className={`tab-btn ${activeTab === 'dashboard' ? 'tab-active' : ''}`}
+                  type="button"
+                  onClick={() => setActiveTab('dashboard')}
+                >
+                  Dashboard
+                </button>
+                <button
+                  className={`tab-btn ${activeTab === 'packages' ? 'tab-active' : ''}`}
+                  type="button"
+                  onClick={() => setActiveTab('packages')}
+                  id="tab-packages"
+                >
+                  Gói tập
+                </button>
+              </>
+            )}
+          </nav>
           <button className="ghost-button" type="button" onClick={handleLogout}>Đăng xuất</button>
         </header>
-        <section className="dashboard-content" aria-live="polite">
-          <p className="eyebrow">SPORTS CENTER / SECURE SESSION</p>
-          <h1>Chào mừng, {user.displayName}</h1>
-          <p className="lead">Bạn đang truy cập khu vực dành cho <strong>{user.role}</strong>.</p>
-          <div className="status-grid">
-            <div><span>Session</span><strong>Active</strong></div>
-            <div><span>Identity</span><strong>{user.email}</strong></div>
-            <div><span>Access</span><strong>RBAC verified</strong></div>
-          </div>
-        </section>
+
+        {activeTab === 'packages' && isManager ? (
+          <PackageManagement accessToken={accessToken} />
+        ) : (
+          <section className="dashboard-content" aria-live="polite">
+            <p className="eyebrow">SPORTS CENTER / SECURE SESSION</p>
+            <h1>Chào mừng, {user.displayName}</h1>
+            <p className="lead">Bạn đang truy cập khu vực dành cho <strong>{user.role}</strong>.</p>
+            <div className="status-grid">
+              <div><span>Session</span><strong>Active</strong></div>
+              <div><span>Identity</span><strong>{user.email}</strong></div>
+              <div><span>Access</span><strong>RBAC verified</strong></div>
+            </div>
+          </section>
+        )}
       </main>
     )
   }
