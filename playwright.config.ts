@@ -9,7 +9,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: 'cd ../Sports_Center_Management_System-UAT-BE && npm run dev',
+      command: 'cd ../Sports_Center_Management_System-UAT-BE && npm run db:seed && npm run dev',
       url: 'http://127.0.0.1:3000/health',
       reuseExistingServer: !process.env.CI,
     },
